@@ -1,20 +1,12 @@
-import * as fs from "fs";
+import {mkdir, readdir, realpath, rmdir, unlink, writeFile} from "fs/promises";
 import * as path from "path";
-import { fileURLToPath } from 'url';
-import * as util from "util";
+import { fileURLToPath } from "url";
 import { isDirectory, isFile } from "../lib/fs-util.js";
 import { git, IGitOptions, revParse } from "../lib/git.js";
 const dirName = path.dirname(fileURLToPath(import.meta.url));
 
-const mkdir = util.promisify(fs.mkdir);
-const readdir = util.promisify(fs.readdir);
-const realpath = util.promisify(fs.realpath);
-const rmdir = util.promisify(fs.rmdir);
-const writeFile = util.promisify(fs.writeFile);
-const unlink = util.promisify(fs.unlink);
-
 export async function removeRecursively(directory: string): Promise<void> {
-    if (!await isDirectory(directory)) {
+    if (!(await isDirectory(directory))) {
         await unlink(directory);
     } else {
         const items = await readdir(directory);
@@ -41,9 +33,7 @@ export class TestRepo {
         this.options = options;
     }
 
-    public async commit(message: string,
-                        fileName?: string, contents?: string):
-        Promise<string> {
+    public async commit(message: string, fileName?: string, contents?: string): Promise<string> {
         const [, gitOpts] = this.parseOptionsForCommit(this.options);
 
         if (!fileName) {
@@ -92,11 +82,10 @@ export class TestRepo {
     }
 
     protected testTick(): number {
-        return this.testTickEpoch += 60;
+        return (this.testTickEpoch += 60);
     }
 
-    protected parseOptionsForCommit(options: ITestCommitOptions):
-        [number, IGitOptions] {
+    protected parseOptionsForCommit(options: ITestCommitOptions): [number, IGitOptions] {
         const tick = this.testTick();
         const gitOpts = {
             env: {
@@ -139,11 +128,10 @@ export class TestRepo {
     }
 }
 
-export async function testCreateRepo(name: string, suffix?: string):
-    Promise<TestRepo> {
+export async function testCreateRepo(name: string, suffix?: string): Promise<TestRepo> {
     let tmp = `${dirName}/../.test-dir/`;
-    if (!await isDirectory(tmp)) {
-        await mkdir(tmp);
+    if (!(await isDirectory(tmp))) {
+        await mkdir(tmp, { recursive: true });
     }
     tmp = await realpath(tmp);
 
@@ -166,9 +154,16 @@ export async function testCreateRepo(name: string, suffix?: string):
     await git(["init", dir]);
 
     process.env.HOME = tmp;
-    if (!await isFile(`${tmp}/.gitconfig`)) {
-        await git(["config", "--global", "user.name", "Test User"]);
-        await git(["config", "--global", "user.email", "user@example.com"]);
+    if (!(await isFile(`${tmp}/.gitconfig`))) {
+        try {
+            await git(["config", "--global", "user.name", "Test User"]);
+            await git(["config", "--global", "user.email", "user@example.com"]);
+        } catch (e) {
+            const error = e as Error;
+            if (!error.message.match(/File exists/)) {
+                throw error
+            }
+        }
     }
     const user = await git(["config", "user.name"], { workDir: dir });
     if (user !== "Test User") {
@@ -181,9 +176,7 @@ export async function testCreateRepo(name: string, suffix?: string):
         },
         workDir: dir,
     };
-    await git(["commit-tree", "-m", "Test commit",
-               "4b825dc642cb6eb9a060e54bf8d69288fbee4904"],
-              opts);
+    await git(["commit-tree", "-m", "Test commit", "4b825dc642cb6eb9a060e54bf8d69288fbee4904"], opts);
     const gitOpts: ITestCommitOptions = { workDir: dir };
 
     return new TestRepo(gitOpts);
