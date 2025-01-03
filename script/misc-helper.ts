@@ -1,5 +1,3 @@
-import { createAppAuth } from "@octokit/auth-app";
-import { Octokit } from "@octokit/rest";
 import { Command } from "commander";
 import { CIHelper } from "../lib/ci-helper.js";
 import { isDirectory } from "../lib/fs-util.js";
@@ -12,6 +10,15 @@ import { IGitMailingListMirrorState, stateKey } from "../lib/mail-archive-helper
 import { IPatchSeriesMetadata } from "../lib/patch-series-metadata.js";
 import { IConfig, loadConfig, setConfig } from "../lib/project-config.js";
 import path from "path";
+import { CIHelper } from "../lib/ci-helper";
+import { isDirectory } from "../lib/fs-util";
+import { git } from "../lib/git";
+import { IGitGitGadgetOptions, getVar } from "../lib/gitgitgadget";
+import { GitHubGlue } from "../lib/github-glue";
+import { toPrettyJSON } from "../lib/json-util";
+import { IGitMailingListMirrorState, stateKey } from "../lib/mail-archive-helper";
+import { IPatchSeriesMetadata } from "../lib/patch-series-metadata";
+import { IConfig } from "../lib/project-config";
 
 const commander = new Command();
 const publishRemoteKey = "publishRemote";
@@ -42,8 +49,7 @@ if (commander.args.length === 0) {
 const commandOptions = commander.opts<ICommanderOptions>();
 
 (async (): Promise<void> => {
-    const config: IConfig = commandOptions.config ? setConfig(await getExternalConfig(commandOptions.config))
-        : getConfig();
+    const config: IConfig = await CIHelper.getConfig(commandOptions.config);
 
     const getGitGitWorkDir = async (): Promise<string> => {
         if (!commandOptions.gitWorkDir) {
@@ -65,6 +71,8 @@ const commandOptions = commander.opts<ICommanderOptions>();
     };
 
     const ci = new CIHelper(await getGitGitWorkDir(), commandOptions.skipUpdate, commandOptions.gitgitgadgetWorkDir);
+    const ci = new CIHelper(await getGitGitWorkDir(), config, commandOptions.skipUpdate,
+        commandOptions.gitgitgadgetWorkDir);
 
     const command = commander.args[0];
     if (command === "update-open-prs") {
@@ -390,6 +398,9 @@ const commandOptions = commander.opts<ICommanderOptions>();
         await set(config.app);
         for (const org of commander.args.slice(1)) {
             await set({ appID: 46807, name: org });
+        await ci.configureGitHubAppToken(config.app);
+        for (const org of commander.args.slice(1)) {
+            await ci.configureGitHubAppToken({ appID: 46807, name: org});
         }
     } else if (command === "handle-pr-comment") {
         if (commander.args.length !== 2 && commander.args.length !== 3) {
